@@ -21,10 +21,13 @@ bt2="../nobackup/bowtie2"
 # file with restriction enzymes - tab delimited file with following columns:
 # 1) restriction enzyme name, 2) restriction site, 3) number of nt offset for cut
 restriction_enzymes="../restr_enz.txt"
+# bin size
+bsize=32000
 
 # optional parameters to override or avoid overriding existing files
-override_map=true
+override_map=false
 override_asn=true
+override_phase=true
 
 # sample name
 samp=$1
@@ -47,7 +50,7 @@ do
   echo "Mapping read" $i
   if [ $stype = "single" ]; then
     if [ ! -r $out/aligned/$ref/$samp.$i.bam ] || $override_map; then
-      bowtie2 --very-sensitive -p $NSLOTS --reorder -x $bt2/$ref -U $out/junc_trim/$samp/${samp}_R$i.fastq.gz 2> $out/aligned/$ref/$samp.$i.bt2.out | samtools view -b - > $out/aligned/$ref/$samp.$i.bam
+      bowtie2 --very-sensitive -p $NSLOTS --reorder -x $bt2/$ref -k 2 -U $out/junc_trim/$samp/${samp}_R$i.fastq.gz 2> $out/aligned/$ref/$samp.$i.bt2.out | samtools view -b - > $out/aligned/$ref/$samp.$i.bam
     fi
   else
     if [ ! -r $out/aligned/$ref1/$samp.$i.bam ] || $override_map; then
@@ -55,6 +58,20 @@ do
     fi
     if [ ! -r $out/aligned/$ref2/$samp.$i.bam ] || $override_map; then
       bowtie2 --very-sensitive -p $NSLOTS --reorder -x $bt2/$ref2 -U $out/junc_trim/$samp/${samp}_R$i.fastq.gz 2> $out/aligned/$ref2/$samp.$i.bt2.out | samtools view -b - > $out/aligned/$ref2/$samp.$i.bam
+    fi
+  fi
+done
+
+rsite=$(awk -v r=$renz '{if ($1==r) print $2}' $restriction_enzymes)
+for i in 1 2
+do
+  if [ ! -r $out/phased/$ref/$samp.$i.sam ] || $override_phase; then
+    echo "Phasing read $i"
+    if [ $stype = "single" ]; then
+      mkdir -p $out/phased/$ref
+      ./identify_unphased_reads $rsite $anns/$ref.$renz.bed 30 $bsize $anns/$ref.$bsize.homology_noisolated.matrixbin <(samtools view $out/aligned/$ref/$samp.$i.bam) $out/phased/$ref/$samp.$i.sam $out/phased/$ref/$samp.$i.out
+    else
+      echo "Warning: phasing isn't implemented for same-species strain hybrids"
     fi
   fi
 done
