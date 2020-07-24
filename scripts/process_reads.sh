@@ -27,6 +27,7 @@ bsize=32000
 # optional parameters to override or avoid overriding existing files
 override_map=false
 override_asn=true
+override_homobin=false
 override_phase=true
 
 # sample name
@@ -47,10 +48,10 @@ echo $samp
 # map reads separately
 for i in 1 2
 do
-  echo "Mapping read" $i
+  echo -e "\nMapping read" $i
   if [ $stype = "single" ]; then
-    if [ ! -r $out/aligned/$ref/$samp.$i.bam ] || $override_map; then
-      bowtie2 --very-sensitive -p $NSLOTS --reorder -x $bt2/$ref -k 2 -U $out/junc_trim/$samp/${samp}_R$i.fastq.gz 2> $out/aligned/$ref/$samp.$i.bt2.out | samtools view -b - > $out/aligned/$ref/$samp.$i.bam
+    if [ ! -r $out/aligned/$ref/$samp.top2align.$i.bam ] || $override_map; then
+      bowtie2 --very-sensitive -p $NSLOTS --reorder -x $bt2/$ref -k 2 -U $out/junc_trim/$samp/${samp}_R$i.fastq.gz 2> $out/aligned/$ref/$samp.top2align.$i.bt2.out | samtools view -b - > $out/aligned/$ref/$samp.top2align.$i.bam
     fi
   else
     if [ ! -r $out/aligned/$ref1/$samp.$i.bam ] || $override_map; then
@@ -62,21 +63,32 @@ do
   fi
 done
 
+if [ $stype = "single" ]; then
+  if [ ! -r $anns/$ref.$bsize.allcombos.homology_noisolated.matrixbin ] || $override_homobin; then
+    echo "Identify homologous bins"
+    ./homology.sh $bsize
+  fi
+fi
+
 rsite=$(awk -v r=$renz '{if ($1==r) print $2}' $restriction_enzymes)
 for i in 1 2
 do
   if [ ! -r $out/phased/$ref/$samp.$i.sam ] || $override_phase; then
-    echo "Phasing read $i"
+    echo -e "\nPhasing read $i"
     if [ $stype = "single" ]; then
       mkdir -p $out/phased/$ref
-      ./identify_unphased_reads $rsite $anns/$ref.$renz.bed 30 $bsize $anns/$ref.$bsize.homology_noisolated.matrixbin <(samtools view $out/aligned/$ref/$samp.$i.bam) $out/phased/$ref/$samp.$i.sam $out/phased/$ref/$samp.$i.out
+      ./identify_unphased_reads $rsite $anns/$ref.$renz.bed 30 $bsize $anns/$ref.$bsize.allcombos.homology_noisolated.matrixbin <(samtools view $out/aligned/$ref/$samp.top2align.$i.bam) $out/phased/$ref/$samp.$i.sam $out/phased/$ref/$samp.$i.out
+      cat $out/phased/$ref/$samp.$i.out
     else
       echo "Warning: phasing isn't implemented for same-species strain hybrids"
     fi
   fi
 done
 
-echo "Assigning read pairs to restriction fragments"
+echo "yay"
+exit 0
+
+echo -e "\nAssigning read pairs to restriction fragments"
 rsite=$(awk -v r=$renz '{if ($1==r) print $2}' $restriction_enzymes)
 if [ ! -r $out/assigned/$ref/$samp.out ] || $override_asn; then
   if [ $stype = "single" ]; then
