@@ -39,8 +39,6 @@ int readend(string cig) {
   return pos;
 }
 
-// function to ......... ***
-
 // data type for read pairs
 struct readpair {
   bool strand1;
@@ -125,7 +123,7 @@ int main(int argc, char** argv) {
   long pos1, pos2;
 
   // build restriction map
-  cout << "Building restriction map\n" << flush;
+  //int counter = 0;
   while (getline(genome_digest,line)) {
     // parse line of restriction digest
     stringstream ss(line);
@@ -133,11 +131,16 @@ int main(int argc, char** argv) {
     ss >> pos1;
     ss >> pos2;
     // if new chr, add new vector
-    if (restr_map.find(chr) != restr_map.end()) {
+    if (restr_map.find(chr) == restr_map.end()) {  // FIXME
+      //cout << chr << " before new vector = " << int(restr_map[chr].size()) << ".\n" << flush;
       restr_map.insert(make_pair(chr,vector<pair<long,long> >()));
+      //cout << chr << " after new vector = " << int(restr_map[chr].size()) << ".\n" << flush;
     }
     // add new element to vector for each restriction fragment
+    //cout << chr << " before new element = " << int(restr_map[chr].size()) << ".\n" << flush;
     restr_map[chr].push_back(make_pair(pos1+1,pos2));
+    //cout << chr << " after new element = " << int(restr_map[chr].size()) << ".\n\n" << flush;
+    //counter++; if (counter > 20) {return 0;}
   }
   genome_digest.close();
 
@@ -146,7 +149,6 @@ int main(int argc, char** argv) {
   string chrbin1, chrbin2;
 
   // build homologous bins map
-  cout << "Building homologous bins map\n" << flush;
   while (getline(homologyfile,line)) {
     // parse line of homologous bins
     stringstream ss(line);
@@ -159,10 +161,10 @@ int main(int argc, char** argv) {
     string homo1 = chr1 + "." + chrbin1;
     string homo2 = chr2 + "." + chrbin2;
     // if new homologous bin, add new vector
-    if (homologous_map.find(homo1) != homologous_map.end()) { // FIXME shouldnt it be ==?
+    if (homologous_map.find(homo1) == homologous_map.end()) { // FIXME
       homologous_map.insert(make_pair(homo1,vector<string >()));
     }
-    if (homologous_map.find(homo2) != homologous_map.end()) {
+    if (homologous_map.find(homo2) == homologous_map.end()) {  // FIXME
       homologous_map.insert(make_pair(homo2,vector<string >()));
     }
     // add new element to vector for each homologous bin
@@ -183,7 +185,7 @@ int main(int argc, char** argv) {
   string homo;
 
   // data for primary alignment
-  bool primary_wins;
+  int primary_wins;
   int primary_flag;
   string primary_chr;
   long primary_pos;
@@ -196,25 +198,18 @@ int main(int argc, char** argv) {
   regex species_chrom_re ("^([^_]+)_([^_]+)$");
 
   // counters for read pair categories
-  //long num_mult_align, num_phased, num_unphased, num_invalid = 0;
+  long num_total = 0;
   long num_mult_align = 0;
   long num_phased = 0;
   long num_unphased = 0;
   long num_invalid = 0;
-  //long long num_primary_wins, num_both_mapq_fail, num_secondary_mapq_fail, num_primary_mapq_fail, num_no_homo_bin, num_nohomolog_loci, num_nohomolog_chr = 0;
+  long num_no_homo_bin_phased = 0;
   long num_primary_wins = 0;
-  long num_both_mapq_fail = 0;
-  long num_secondary_mapq_fail = 0;
-  long num_primary_mapq_fail = 0;
   long num_no_homo_bin = 0;
   long num_nohomolog_loci = 0;
   long num_nohomolog_chr = 0;
 
-  cout << "Reading lines\n" << flush;
-  int count = 0;
   while (getline(readfile,line)) {
-
-
     // parse line from read 1 file
     stringstream ss(line);
     ss >> rname1;
@@ -249,8 +244,6 @@ int main(int argc, char** argv) {
       mult_align = false;
     }
 
-    //cout << count << " t:" << true << " flag:" << flag << " 2nd:" << secondary << " mult:" << mult_align << " as:" << as << " xs:" << xs << '\n' << flush; count++;
-
     if (cig == "*") {
       homo = "NA";
     }
@@ -280,24 +273,42 @@ int main(int argc, char** argv) {
       re1end = restr_map[chr][upper].second + resite.length();
       // use restricton fragment location to determine which bin of this chromosome the read falls on
       long re = (flag == 0) ? re1end : re1start;
-      long chrbin = re/bsize;
+      long chrbin = re/bsize + 0.5;
       // define homologos bin
       homo = chr + "." + to_string(chrbin);
+
     }
 
     // if no multiple alignments exist, read is phased (maps to only one homolog)
     if (!mult_align) {
-      phased = 1;
-      num_phased++;
+      if ((mapq < mapq_filt) || (as-xs < as_filt)) {
+        phased = -1;
+        num_invalid++;
+      }
+      else {
+        // if homologous bin for alignment can't be identified
+        if (homologous_map.find(homo) == homologous_map.end()) {
+          // read is invalid: it can't be determined whether read maps to homologous loci
+          phased = -1;
+          num_invalid++;
+          num_no_homo_bin_phased++;
+        }
+        else { // read is phased: read is valid and maps only to homolog of primary alignment
+          phased = 1;
+          num_phased++;
+        }
+      }
+      num_total++;
     }
     // Process multiple alignments
     else {
       // if this is the primary alignment
       if (!secondary) {
         num_mult_align++;
+        num_total++;
         // if primary MAPQ fails or the difference between primary vs secondary alignment scores fails threshold
         if ((mapq < mapq_filt) || (as-xs < as_filt)) {
-          primary_wins = false;
+          primary_wins = 0;
           // note primary alignment data for comparsion with secondary alignment data
           primary_flag = flag;
           primary_chr = chr;
@@ -309,62 +320,48 @@ int main(int argc, char** argv) {
           // proceed to secondary alignment
           continue;
         }
-        else {
-          // read is phased: maps only to homolog of primary alignment
-          primary_wins = true;
-          phased = 1;
-          num_phased++;
+        else { // read maps best to homolog of primary alignment
+          // if homologous bin for primary alignment can't be identified
+          if (homologous_map.find(homo) == homologous_map.end()) {
+            // read is invalid: it can't be determined whether primary read maps to homologous loci
+            primary_wins = -1;
+            phased = -1;
+            num_invalid++;
+            num_no_homo_bin_phased++;
+          }
+          else { // read is phased: read is valid and maps best to homolog of primary alignment
+            primary_wins = 1;
+            phased = 1;
+            num_phased++;
+            num_primary_wins++;
+          }
         }
-        //cout << "primary_wins:" << primary_wins << "  as_filt_FAIL:" << (as-xs < as_filt) << "\n\n" << flush;
       }
       else { // this is the secondary alignment
         // if primary MAPQ passes & the difference between primary vs secondary alignment scores passes threshold
-        if (primary_wins) {
+        if (primary_wins != 0) {
           // discard data for secondary alignment (data for primary alignment was already recorded)
-          num_primary_wins++;
-          //cout << "pimary wins" << "\n\n" << flush;
           continue;
         }
-        // if if secondary MAPQ fails
-        if (mapq < mapq_filt) {
-          // read is invalid: both primary & secondary reads are bad
-          phased = -1;
-          num_invalid++;
-          if (primary_mapq < mapq_filt) {
-            num_both_mapq_fail++;
-          } else {
-            num_secondary_mapq_fail++;
+        // if primary vs secondary species is different and chromosome num is the same
+        string species  = regex_replace (chr,species_chrom_re,"$1");
+        string chromnum  = regex_replace (chr,species_chrom_re,"$2");
+        string primary_species  = regex_replace (primary_chr,species_chrom_re,"$1");
+        string primary_chromnum  = regex_replace (primary_chr,species_chrom_re,"$2");
+        //if ((species != primary_species) && (chromnum == primary_chromnum)) {
+        if ((species != primary_species)) {
+          auto iter = homologous_map.find(homo);
+          auto primary_iter = homologous_map.find(primary_homo);
+          // if homologous bin for either alignment can't be identified
+          if ((iter == homologous_map.end()) || (primary_iter == homologous_map.end()) ) {
+            // read is invalid: it can't be determined whether reads map to homologous loci
+            phased = -1;
+            num_invalid++;
+            num_no_homo_bin++;
           }
-          //cout << "secondary MAPQ fail " << mapq << "\t\t" << primary_as << '\t' << as << "\t\t" << primary_as-as << '\t' << primary_mapq << "\n\n" << flush;
-        }
-        // if primary MAPQ fails (and secondary MAPQ passes)
-        else if (primary_mapq < mapq_filt) {
-          // read is phased: maps only to homolog of secondary alignment
-          phased = 2;
-          num_phased++;
-          num_primary_mapq_fail++;
-          //cout << "primary MAPQ fail; secondary MAPQ pass" << "\n\n" << flush;
-          // record secondary alignment below
-        }
-        // if primary + secondary MAPQ passes and there are no other alignments with similar scores
-        else {
-          // if primary vs secondary species is different and chromosome num is the same
-          string species  = regex_replace (chr,species_chrom_re,"$1");
-          string chromnum  = regex_replace (chr,species_chrom_re,"$2");
-          string primary_species  = regex_replace (primary_chr,species_chrom_re,"$1");
-          string primary_chromnum  = regex_replace (primary_chr,species_chrom_re,"$2");
-          if ((species != primary_species) && (chromnum == primary_chromnum)) {
-            auto iter = homologous_map.find(homo);
-            // if homologous bin for secondary alignment can't be identified
-            if (iter == homologous_map.end()) {
-              // read is invalid: it can't be determined whether read maps to homologous loci
-              phased = -1;
-              num_invalid++;
-              //cout << "no homo bin found" << "\n\n" << flush;
-              num_no_homo_bin++;
-            }
+          else {
             // if primary & secondary alignment loci are in homologous bins
-            else if (find(iter->second.begin(), iter->second.end(), primary_homo) != iter->second.end() ) {
+            if (find(iter->second.begin(), iter->second.end(), primary_homo) != iter->second.end() ) {
               // read is ambiguous: maps to 2 homologous loci
               phased = 0;
               num_unphased++;
@@ -374,25 +371,21 @@ int main(int argc, char** argv) {
               pos = primary_pos;
               mapq = primary_mapq;
               cig = primary_cig;
-              //cout << "AMBIG" << "\n\n" << flush;
             }
             else { // primary & secondary alignments aren't homologous loci
               // read is invalid: maps to 2 non-homologous loci
               phased = -1;
               num_invalid++;
-              //cout << "nonhomologous loci" << "\n\n" << flush;
               num_nohomolog_loci++;
             }
+          }
 
-          }
-          else { // primary & secondary alignments aren't homologous loci (species/chrom mismatch)
-            // read is invalid: maps to 2 non-homologous loci
-            phased = -1;
-            num_invalid++;
-            //cout << "nonhomologous chr" << "\n\n" << flush;
-            num_nohomolog_chr++;
-          }
-          //cout << rname1 << '\t' << flag << '\t' << chr << '\t' << pos << '\t' << mapq << '\t' << cig << '\t' << phased << "\n\n" << flush;
+        }
+        else { // primary & secondary alignments aren't homologous loci (species/chrom mismatch)
+          // read is invalid: maps to 2 non-homologous loci
+          phased = -1;
+          num_invalid++;
+          num_nohomolog_chr++;
         }
       }
     }
@@ -403,14 +396,14 @@ int main(int argc, char** argv) {
   readout.close();
 
   // print read pair statistics
+  statout << "num_total\t" << num_total << '\n';
+  statout << "num_total_valid\t" << num_total - num_invalid << '\n';
   statout << "num_mult_align\t" << num_mult_align << '\n';
   statout << "num_phased\t" << num_phased << '\n';
   statout << "num_unphased\t" << num_unphased << '\n';
   statout << "num_invalid\t" << num_invalid << '\n';
+  statout << "num_no_homo_bin_phased\t" << num_no_homo_bin_phased << '\n';
   statout << "num_primary_wins\t" << num_primary_wins << '\n';
-  statout << "num_both_mapq_fail\t" << num_both_mapq_fail << '\n';
-  statout << "num_secondary_mapq_fail\t" << num_secondary_mapq_fail << '\n';
-  statout << "num_primary_mapq_fail\t" << num_primary_mapq_fail << '\n';
   statout << "num_no_homo_bin\t" << num_no_homo_bin << '\n';
   statout << "num_nohomolog_loci\t" << num_nohomolog_loci << '\n';
   statout << "num_nohomolog_chr\t" << num_nohomolog_chr << '\n';
