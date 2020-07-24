@@ -6,7 +6,7 @@
 . /etc/profile.d/modules.sh
 module load modules modules-init modules-gs
 module load fastqc/0.11.3
-module load python/2.7.3 cutadapt/1.8.3
+module load python/3.6.4 cutadapt/2.5
 
 # PARAMETERS
 # directory with sequencing data
