@@ -1,0 +1,6 @@
+ILY456_saturated_Sau3AI	single	ScSu	-	-	Sau3AI
+ILY456_saturated_HindIII	single	ScSu	-	-	HindIII
+ILY456_exponential_Sau3AI	single	ScSu	-	-	Sau3AI
+ILY456_exponential_rep2_Sau3AI	single	ScSu	-	-	Sau3AI
+ILY456_galactose_Sau3AI	single	ScSu	-	-	Sau3AI
+ILY456_nocodazole_Sau3AI	single	ScSu	-	-	Sau3AI
