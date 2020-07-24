@@ -10,7 +10,12 @@ out="../nobackup"
 # load modules
 module load bowtie2/2.2.3 samtools/1.2
 
-bsize=32000
+if [ -z "$1" ]; then
+   bsize=32000
+else
+  bsize=$1
+fi
+echo "Bin size = $bsize"
 
 # INTERSPECIFIC HYBRIDS
 # for interspecies homology, find homologous genes and look at end positions
@@ -47,7 +52,7 @@ do
   j=$(($i+1))
 
   while [ $j -lt 3 ]; do
-    echo "Finding homology for" ${spec2[$i]} "and" ${spec2[$j]}
+    echo -e "\n\nFinding homology for" ${spec2[$i]} "and" ${spec2[$j]}
 
     # match up genes
     echo "Matching genes"
@@ -61,7 +66,7 @@ do
     # find all and best homologous bins, excluding singletons and finding neighbors
     echo "Finding all and best homologous bins"
     ./homology_bins.sh $bsize ${abbr[$i]}${abbr[$j]} 1
-    
+
     # increment counter
     let j+=1
   done
