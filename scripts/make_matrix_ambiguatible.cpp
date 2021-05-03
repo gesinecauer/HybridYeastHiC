@@ -61,10 +61,10 @@ int main(int argc, char** argv) {
     string homo1 = chr1 + "." + chrbin1;
     string homo2 = chr2 + "." + chrbin2;
     // if new homologous bin, add new vector
-    if (homologous_map.find(homo1) == homologous_map.end()) { // FIXME
+    if (homologous_map.find(homo1) == homologous_map.end()) { // FIXME?
       homologous_map.insert(make_pair(homo1,vector<string >()));
     }
-    if (homologous_map.find(homo2) == homologous_map.end()) {  // FIXME
+    if (homologous_map.find(homo2) == homologous_map.end()) {  // FIXME?
       homologous_map.insert(make_pair(homo2,vector<string >()));
     }
     // add new element to vector for each homologous bin
@@ -74,7 +74,6 @@ int main(int argc, char** argv) {
   homologyfile.close();
 
   // parse chromosome lengths
-  string line;
   vector<string> chrs;
   vector<long> chrlens;
   string chr;
@@ -122,13 +121,13 @@ int main(int argc, char** argv) {
   }
   maskfile.close();
 
-  string chr1, chr2;
   long re1, re2;
   long pos1, pos2;
   long pend1, pend2;
   long map1, map2;
   int dir1, dir2;
   int bin1, bin2;
+  long num_invalid = 0;
   while (getline(countfile,line)) {
     // parse one read pair
     stringstream ss(line);
@@ -156,12 +155,32 @@ int main(int argc, char** argv) {
         break;
       }
     }
-    // add to matrix count (symmetrically) if both reads are from chromosomes included in the matrix and not in same bin
+
+    // homo bin
+    long chrbin1 = re1/bsize + 0.5;
+    long chrbin2 = re2/bsize + 0.5;
+    string homo1 = chr + "." + to_string(chrbin1);
+    string homo2 = chr + "." + to_string(chrbin2);
+    auto iter1 = homologous_map.find(homo1);
+    auto iter2 = homologous_map.find(homo2);
+    // if homologous bin for either alignment can't be identified
+    if ((iter1 == homologous_map.end()) || (iter2 == homologous_map.end()) ) {
+      // read is invalid: it can't be determined whether reads map to homologous loci
+      num_invalid++;
+      skippair = true;
+    }
+    else {
+      
+    }
+
+    // add to matrix count (upper triangular only) if both reads are from chromosomes included in the matrix and not in same bin
     if (!skippair && (cumbins.count(chr1) == 1) && (cumbins.count(chr2) == 1)) {
       bin1 = cumbins[chr1] + re1/bsize;
       bin2 = cumbins[chr2] + re2/bsize;
-      if (bin1 != bin2) {
+      if (bin1 > bin2) {
         outmatr[nbin*bin2 + bin1]++;
+      }
+      else if (bin1 < bin2) {
         outmatr[nbin*bin1 + bin2]++;
       }
     }
